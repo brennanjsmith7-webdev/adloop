@@ -30,6 +30,7 @@ TOOLSETS: dict[str, str] = {
     "gsc": "Search Console reads",
     "web": "PageSpeed / web performance",
     "merchant": "Merchant Center reads",
+    "gbp": "Google Business Profile read-only reporting",
 }
 
 
@@ -2267,6 +2268,34 @@ def _apply_toolsets_env() -> None:
             f"Valid toolsets: {', '.join(TOOLSETS)}. Example: ADLOOP_TOOLSETS=ads,ga4"
         )
     mcp.enable(tags=requested | {"core"}, only=True)
+
+
+@mcp.tool(annotations=_READONLY, tags={"gbp"})
+@_safe
+def list_gbp_accounts() -> dict:
+    """List authorized Google Business Profile accounts (read only)."""
+    from adloop.gbp import list_gbp_accounts as read
+    return read()
+
+
+@mcp.tool(annotations=_READONLY, tags={"gbp"})
+@_safe
+def list_gbp_locations(account_name: str) -> dict:
+    """List all locations for accounts/ID, including websites for mapping."""
+    from adloop.gbp import list_gbp_locations as read
+    return read(account_name)
+
+
+@mcp.tool(annotations=_READONLY, tags={"gbp"})
+@_safe
+def run_gbp_report(location_name: str, date_range_start: str, date_range_end: str) -> dict:
+    """Read daily profile views, call clicks, website clicks and directions.
+
+    Use locations/ID and ISO dates. Allow reporting lag; missing series
+    are unavailable, never zero. Calls are button clicks, not answered calls.
+    """
+    from adloop.gbp import run_gbp_report as read
+    return read(location_name, date_range_start, date_range_end)
 
 
 _apply_toolsets_env()
