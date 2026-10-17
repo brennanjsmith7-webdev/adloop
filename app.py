@@ -1,5 +1,10 @@
 """Vercel's FastAPI entry point wraps the authenticated MCP ASGI service."""
 from contextlib import asynccontextmanager
+from pathlib import Path
+import sys
+
+# Vercel installs dependencies without installing this src-layout project.
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 from fastapi import FastAPI
 from adloop.hosted import HostedApplication
 
