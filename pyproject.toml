@@ -18,6 +18,7 @@ dependencies = [
     "google-auth-oauthlib==1.5.0",
     "pyyaml==6.0.3",
     "psycopg[binary]>=3.2,<4",
+    "fastapi>=0.117,<1",
 ]
 
 [project.urls]
