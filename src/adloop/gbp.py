@@ -16,7 +16,8 @@ METRICS = ['BUSINESS_IMPRESSIONS_DESKTOP_MAPS', 'BUSINESS_IMPRESSIONS_DESKTOP_SE
 
 def _session():
     raw = os.environ.get('GBP_OAUTH_JSON')
-    if not raw and ENV_PATH.exists():
+    from adloop.runtime import deployment_mode
+    if not raw and deployment_mode() != 'server' and ENV_PATH.exists():
         for line in ENV_PATH.read_text().splitlines():
             if line.startswith('GBP_OAUTH_JSON='):
                 raw = line.partition('=')[2]
@@ -24,6 +25,8 @@ def _session():
     if not raw:
         raise RuntimeError('Business Profile authorization required; run scripts/connect_gbp.py')
     info = json.loads(raw)
+    if info.get('token_uri', 'https://oauth2.googleapis.com/token') != 'https://oauth2.googleapis.com/token':
+        raise RuntimeError('Unsupported Business Profile OAuth token endpoint')
     if SCOPE not in info.get('scopes', []):
         raise RuntimeError('Business Profile authorization is missing business.manage')
     return AuthorizedSession(Credentials.from_authorized_user_info(info))

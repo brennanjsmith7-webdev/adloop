@@ -9,8 +9,12 @@ embedder to arm it.
 """
 
 import inspect
+import pytest
 
-from mcp.shared import session as mcp_session
+try:
+    from mcp.shared import session as mcp_session
+except ImportError:
+    mcp_session = None  # SDK v2 removed the affected legacy responder entirely.
 
 
 def test_importing_the_server_stays_side_effect_free():
@@ -27,6 +31,7 @@ def test_importing_the_server_stays_side_effect_free():
     )
 
 
+@pytest.mark.skipif(mcp_session is None, reason="MCP SDK v2 has no legacy RequestResponder cancellation guard")
 def test_install_runtime_patches_arms_the_cancellation_guard():
     import adloop
 
@@ -59,6 +64,9 @@ def test_install_runtime_patches_is_idempotent():
     import adloop
 
     adloop.install_runtime_patches()
+    if mcp_session is None:
+        adloop.install_runtime_patches()
+        return
     first = mcp_session.RequestResponder.respond
     adloop.install_runtime_patches()
 

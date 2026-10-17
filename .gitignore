@@ -14,8 +14,7 @@ build/
 .env
 .env.*
 
-# uv
-uv.lock
+# Reproducible hosted dependency lock is tracked
 
 #dev-docs
 docs/
@@ -59,3 +58,5 @@ adloop-cowork.log.*
 
 # Machine-local Claude Code context
 CLAUDE.local.md
+.vercel
+.env*

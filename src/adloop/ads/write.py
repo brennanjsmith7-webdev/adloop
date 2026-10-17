@@ -1917,6 +1917,14 @@ def confirm_and_apply(
             ),
         }
 
+    # A lock alone cannot prevent replay after Google's successful mutation
+    # followed by a timeout, audit failure or plan-delete failure. Persist this
+    # one-way fence BEFORE the provider request, outside the error handler.
+    from adloop.runtime import current_tenant, deployment_mode
+    if deployment_mode() == "server":
+        from adloop.hosted_store import claim_execution
+        claim_execution(current_tenant(), plan.plan_id)
+
     try:
         result = _execute_plan(config, plan)
     except Exception as e:

@@ -141,6 +141,9 @@ def get_merchant_feed_health(
     try:
         statuses, issues_payload = _fetch()
     except MerchantNotRegistered:
+        from adloop.runtime import deployment_mode
+        if deployment_mode() == "server":
+            return {"error": "Merchant API registration is required. Hosted read tools never perform registration.", "registration_required": True}
         # One-time Merchant API setup: register this GCP project as a
         # developer with the merchant account, then retry once in case
         # the registration propagates instantly.
