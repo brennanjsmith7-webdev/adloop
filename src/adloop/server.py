@@ -30,6 +30,7 @@ TOOLSETS: dict[str, str] = {
     "gsc": "Search Console reads",
     "web": "PageSpeed / web performance",
     "merchant": "Merchant Center reads",
+    "gbp": "Google Business Profile read-only reporting",
 }
 
 
@@ -152,6 +153,7 @@ def _gtm_defaults(account_id: str, container_id: str) -> tuple[str, str]:
 mcp = FastMCP(
     "AdLoop",
     instructions=_build_orchestration_instructions(),
+    mask_error_details=True,
 )
 
 
@@ -159,6 +161,10 @@ def _structured_error(fn_name: str, exc: Exception) -> dict:
     """Translate common auth failures into actionable structured errors."""
     err = str(exc)
     err_lower = err.lower()
+    from adloop.runtime import deployment_mode
+    if deployment_mode() == "server":
+        category = next((label for needle, label in (("invalid_grant", "OAUTH_RECONNECT_REQUIRED"), ("invalid_client", "OAUTH_CLIENT_INVALID"), ("insufficient", "INSUFFICIENT_PERMISSION"), ("developer_token_not_approved", "ADS_DEVELOPER_TOKEN_NOT_APPROVED")) if needle in err_lower), "UPSTREAM_FAILURE")
+        return {"error": "The upstream operation failed; private details were withheld.", "tool": fn_name, "category": category}
 
     if "developer_token_not_approved" in err_lower or "only approved for use with test accounts" in err_lower:
         return {
@@ -261,6 +267,17 @@ def _structured_error(fn_name: str, exc: Exception) -> dict:
     return {"error": err, "tool": fn_name}
 
 
+def _hosted_result(value):
+    """Keep upstream error bodies (which may include credentials) off HTTP responses."""
+    if isinstance(value, dict):
+        return {key: ("Private upstream error details withheld" if val else val)
+                if key in {"error", "details", "error_details"} or key.endswith(("_error", "_error_details"))
+                else _hosted_result(val) for key, val in value.items()}
+    if isinstance(value, list):
+        return [_hosted_result(item) for item in value]
+    return value
+
+
 def _safe(fn: Callable) -> Callable:
     """Wrap a tool function so exceptions return structured error dicts.
 
@@ -272,8 +289,13 @@ def _safe(fn: Callable) -> Callable:
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         try:
-            return fn(*args, **kwargs)
+            result = fn(*args, **kwargs)
+            from adloop.runtime import deployment_mode
+            return _hosted_result(result) if deployment_mode() == "server" else result
         except RuntimeError as e:
+            from adloop.runtime import deployment_mode
+            if deployment_mode() == "server":
+                return _structured_error(fn.__name__, e)
             return {"error": str(e)}
         except Exception as e:
             return _structured_error(fn.__name__, e)
@@ -2057,7 +2079,11 @@ def confirm_and_apply(
     """
     from adloop.ads.write import confirm_and_apply as _impl
 
-    return _impl(current_config(), plan_id=plan_id, dry_run=dry_run)
+    from adloop.hosted_store import execution_lock
+    from adloop.runtime import current_tenant
+
+    with execution_lock(current_tenant(), plan_id):
+        return _impl(current_config(), plan_id=plan_id, dry_run=dry_run)
 
 
 # ---------------------------------------------------------------------------
@@ -2267,6 +2293,34 @@ def _apply_toolsets_env() -> None:
             f"Valid toolsets: {', '.join(TOOLSETS)}. Example: ADLOOP_TOOLSETS=ads,ga4"
         )
     mcp.enable(tags=requested | {"core"}, only=True)
+
+
+@mcp.tool(annotations=_READONLY, tags={"gbp"})
+@_safe
+def list_gbp_accounts() -> dict:
+    """List authorized Google Business Profile accounts (read only)."""
+    from adloop.gbp import list_gbp_accounts as read
+    return read()
+
+
+@mcp.tool(annotations=_READONLY, tags={"gbp"})
+@_safe
+def list_gbp_locations(account_name: str) -> dict:
+    """List all locations for accounts/ID, including websites for mapping."""
+    from adloop.gbp import list_gbp_locations as read
+    return read(account_name)
+
+
+@mcp.tool(annotations=_READONLY, tags={"gbp"})
+@_safe
+def run_gbp_report(location_name: str, date_range_start: str, date_range_end: str) -> dict:
+    """Read daily profile views, call clicks, website clicks and directions.
+
+    Use locations/ID and ISO dates. Allow reporting lag; missing series
+    are unavailable, never zero. Calls are button clicks, not answered calls.
+    """
+    from adloop.gbp import run_gbp_report as read
+    return read(location_name, date_range_start, date_range_end)
 
 
 _apply_toolsets_env()
